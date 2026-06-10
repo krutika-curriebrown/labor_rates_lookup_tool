@@ -98,23 +98,27 @@ def load_data():
         st.error("AZURE_STORAGE_CONNECTION_STRING environment variable is not set.")
         st.stop()
 
-    # Parse account name and key from the connection string so deltalake can authenticate
-    conn_parts = {}
-    for segment in conn_str.split(';'):
-        if '=' in segment:
-            k, _, v = segment.partition('=')
-            conn_parts[k] = v
+    from azure.storage.blob import BlobServiceClient
+    client = BlobServiceClient.from_connection_string(conn_str)
+    container_client = client.get_container_client(AZURE_CONTAINER)
 
-    from deltalake import DeltaTable
-    table_uri = f"az://{AZURE_CONTAINER}/{AZURE_BLOB_PATH}"
-    dt = DeltaTable(
-        table_uri,
-        storage_options={
-            "azure_storage_account_name": conn_parts.get('AccountName', ''),
-            "azure_storage_account_key":  conn_parts.get('AccountKey', ''),
-        },
-    )
-    df = dt.to_pandas()
+    # List every .parquet file under the Delta table prefix (skips _delta_log JSON files)
+    prefix = AZURE_BLOB_PATH.rstrip('/') + '/'
+    part_blobs = [
+        b.name for b in container_client.list_blobs(name_starts_with=prefix)
+        if b.name.endswith('.parquet')
+    ]
+
+    if not part_blobs:
+        st.error(f"No parquet files found under {AZURE_CONTAINER}/{prefix}")
+        st.stop()
+
+    frames = []
+    for blob_name in part_blobs:
+        raw = container_client.get_blob_client(blob_name).download_blob().readall()
+        frames.append(pd.read_parquet(BytesIO(raw)))
+
+    df = pd.concat(frames, ignore_index=True)
 
     df.insert(
         df.columns.get_loc('DATE') + 1,
