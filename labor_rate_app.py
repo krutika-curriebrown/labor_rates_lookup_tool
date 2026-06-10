@@ -141,11 +141,13 @@ def load_data():
 
     df = pd.concat(frames, ignore_index=True)
 
+    dates = pd.to_datetime(df['DATE'], errors='coerce')
     df.insert(
         df.columns.get_loc('DATE') + 1,
         'YEAR',
-        pd.to_datetime(df['DATE'], errors='coerce').dt.year.astype('Int64'),
+        dates.dt.year.astype('Int64'),
     )
+    df['DATE'] = dates.dt.strftime('%Y-%m-%d')
     return df
 
 
