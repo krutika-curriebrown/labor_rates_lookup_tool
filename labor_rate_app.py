@@ -12,10 +12,10 @@ from io import BytesIO
 
 # Azure Blob Storage — set these as environment variables in Azure App Service
 # AZURE_STORAGE_CONNECTION_STRING : full connection string from the storage account
-# AZURE_CONTAINER                 : blob container name      (default: indicesdl)
-# AZURE_BLOB_PATH                 : blob path incl. filename (default: processed/final_merged_labor_rates.csv)
-AZURE_CONTAINER = os.environ.get('AZURE_CONTAINER', 'indicesdl')
-AZURE_BLOB_PATH = os.environ.get('AZURE_BLOB_PATH',  'processed/final_merged_labor_rates.csv')
+# AZURE_CONTAINER                 : blob container name   (default: processed)
+# AZURE_BLOB_PATH                 : Delta table path      (default: final_merged_labor_rates)
+AZURE_CONTAINER = os.environ.get('AZURE_CONTAINER', 'processed')
+AZURE_BLOB_PATH = os.environ.get('AZURE_BLOB_PATH',  'final_merged_labor_rates')
 
 DEFAULT_COLUMNS = [
     'POSITION', 'LABOR_TYPE', 'TRADE_TIER', 'SENIORITY_LEVEL',
@@ -98,12 +98,23 @@ def load_data():
         st.error("AZURE_STORAGE_CONNECTION_STRING environment variable is not set.")
         st.stop()
 
-    from azure.storage.blob import BlobServiceClient
-    client      = BlobServiceClient.from_connection_string(conn_str)
-    blob_client = client.get_blob_client(container=AZURE_CONTAINER, blob=AZURE_BLOB_PATH)
-    raw         = blob_client.download_blob().readall()
-    buf         = BytesIO(raw)
-    df = pd.read_parquet(buf) if AZURE_BLOB_PATH.endswith('.parquet') else pd.read_csv(buf, low_memory=False)
+    # Parse account name and key from the connection string so deltalake can authenticate
+    conn_parts = {}
+    for segment in conn_str.split(';'):
+        if '=' in segment:
+            k, _, v = segment.partition('=')
+            conn_parts[k] = v
+
+    from deltalake import DeltaTable
+    table_uri = f"az://{AZURE_CONTAINER}/{AZURE_BLOB_PATH}"
+    dt = DeltaTable(
+        table_uri,
+        storage_options={
+            "azure_storage_account_name": conn_parts.get('AccountName', ''),
+            "azure_storage_account_key":  conn_parts.get('AccountKey', ''),
+        },
+    )
+    df = dt.to_pandas()
 
     df.insert(
         df.columns.get_loc('DATE') + 1,
