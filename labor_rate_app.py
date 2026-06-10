@@ -91,6 +91,29 @@ FIXED_OPTIONS = {
 }
 
 
+def _delta_current_files(container_client, table_prefix):
+    """Read _delta_log to return only the parquet paths in the current snapshot."""
+    import json
+    log_prefix = f"{table_prefix}/_delta_log/"
+    added, removed = {}, set()
+    log_blobs = sorted(
+        b.name for b in container_client.list_blobs(name_starts_with=log_prefix)
+        if b.name.endswith('.json')
+    )
+    for blob_name in log_blobs:
+        raw = container_client.get_blob_client(blob_name).download_blob().readall()
+        for line in raw.decode('utf-8').splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            if 'add' in entry:
+                added[entry['add']['path']] = True
+            if 'remove' in entry:
+                removed.add(entry['remove']['path'])
+    return {p for p in added if p not in removed}
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
     conn_str = os.environ.get('AZURE_STORAGE_CONNECTION_STRING')
@@ -101,20 +124,18 @@ def load_data():
     from azure.storage.blob import BlobServiceClient
     client = BlobServiceClient.from_connection_string(conn_str)
     container_client = client.get_container_client(AZURE_CONTAINER)
+    table_prefix = AZURE_BLOB_PATH.rstrip('/')
 
-    # List every .parquet file under the Delta table prefix (skips _delta_log JSON files)
-    prefix = AZURE_BLOB_PATH.rstrip('/') + '/'
-    part_blobs = [
-        b.name for b in container_client.list_blobs(name_starts_with=prefix)
-        if b.name.endswith('.parquet')
-    ]
-
-    if not part_blobs:
-        st.error(f"No parquet files found under {AZURE_CONTAINER}/{prefix}")
+    # Read the Delta log to find which parquet files are in the current snapshot.
+    # Overwrites mark old files as "remove", so stale parts are always skipped.
+    current_files = _delta_current_files(container_client, table_prefix)
+    if not current_files:
+        st.error(f"Delta log at {AZURE_CONTAINER}/{table_prefix} resolved no active parquet files.")
         st.stop()
 
     frames = []
-    for blob_name in part_blobs:
+    for rel_path in sorted(current_files):
+        blob_name = f"{table_prefix}/{rel_path}"
         raw = container_client.get_blob_client(blob_name).download_blob().readall()
         frames.append(pd.read_parquet(BytesIO(raw)))
 
