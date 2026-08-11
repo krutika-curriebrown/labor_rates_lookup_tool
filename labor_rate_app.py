@@ -13,9 +13,9 @@ from io import BytesIO
 # Azure Blob Storage — set these as environment variables in Azure App Service
 # AZURE_STORAGE_CONNECTION_STRING : full connection string from the storage account
 # AZURE_CONTAINER                 : blob container name   (default: presentation)
-# AZURE_BLOB_PATH                 : Delta table path      (default: final_labor_rates)
+# AZURE_BLOB_PATH                 : Delta table path      (default: final_labor_rates_clean)
 AZURE_CONTAINER = os.environ.get('AZURE_CONTAINER', 'presentation')
-AZURE_BLOB_PATH = os.environ.get('AZURE_BLOB_PATH', 'final_labor_rates')
+AZURE_BLOB_PATH = os.environ.get('AZURE_BLOB_PATH', 'final_labor_rates_clean')
 
 DEFAULT_COLUMNS = [
     'POSITION', 'LABOR_TYPE', 'TRADE_TIER', 'SENIORITY_LEVEL',
