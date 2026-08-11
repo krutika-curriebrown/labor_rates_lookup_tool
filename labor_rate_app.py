@@ -16,7 +16,8 @@ from io import BytesIO
 # AZURE_BLOB_PATH                 : Delta table path      (default: final_labor_rates_clean)
 AZURE_CONTAINER = os.environ.get('AZURE_CONTAINER', 'presentation')
 AZURE_BLOB_PATH = os.environ.get('AZURE_BLOB_PATH', 'final_labor_rates_clean')
-
+st.write("Container:", AZURE_CONTAINER)
+st.write("Path:", AZURE_BLOB_PATH)
 DEFAULT_COLUMNS = [
     'POSITION', 'LABOR_TYPE', 'TRADE_TIER', 'SENIORITY_LEVEL',
     'TIME', 'CITY', 'STATE', 'COUNTRY',
