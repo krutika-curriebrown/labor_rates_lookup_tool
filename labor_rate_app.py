@@ -2,7 +2,6 @@
 Labor Rate Lookup - CBI Tool
 Data is read from Azure Blob Storage via AZURE_STORAGE_CONNECTION_STRING.
 """
-
 import os
 import re
 import streamlit as st
